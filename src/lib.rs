@@ -1,7 +1,3 @@
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}
+#![feature(allocator_api, unique, pointer_methods, core_intrinsics)]
+
+pub mod hash_table;
