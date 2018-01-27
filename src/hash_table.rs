@@ -147,7 +147,7 @@ unsafe impl Send for IntegerHashTable {}
 unsafe impl Sync for IntegerHashTable {}
 
 #[cfg(test)]
-mod integer_hash_map_tests {
+mod tests {
 
     use super::*;
 

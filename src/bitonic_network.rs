@@ -358,3 +358,28 @@ fn merge_networks<L>(upper: Vec<Wire<L>>, lower: Vec<Wire<L>>) -> Vec<Wire<L>> {
         merge_wires(upper_result, lower_result)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn initialize_network() {
+        let network = BitonicNetwork::new(16, vec![1; 16]);
+
+        assert_eq!(network.width(), 16);
+    }
+
+    #[test]
+    #[should_panic]
+    fn initialize_network_bad_width() {
+        let network = BitonicNetwork::new(3, vec![1, 2, 3]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn initialize_network_not_matching_outputs() {
+        let network = BitonicNetwork::new(4, vec![1, 2]);
+    }
+
+}
