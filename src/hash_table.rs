@@ -33,6 +33,7 @@ impl IntegerHashTable {
     }
 
     fn layout(capacity: usize) -> Result<Layout, AllocErr> {
+        // Multiply capacity by 2 to simulate the effect of a tuple of (u32, u32)
         match Layout::array::<u32>(2 * capacity) {
             Some(layout) => Ok(layout),
             None => Err(AllocErr::invalid_input("Capacity overflowed layout.")),
@@ -221,7 +222,7 @@ mod integer_hash_map_tests {
     use std::sync::Arc;
 
     #[test]
-    fn multiple_thread_contention() {
+    fn multiple_thread_update() {
         const NUM_THREADS: usize = 8;
 
         let mut handles = Vec::new();
