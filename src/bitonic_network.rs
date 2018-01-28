@@ -1,5 +1,5 @@
 use std::sync::atomic::{self, AtomicUsize};
-use std::ptr::Shared;
+use std::ptr::NonNull;
 use std::heap::{Alloc, Heap, Layout};
 use std::collections::HashSet;
 use std::thread;
@@ -17,15 +17,15 @@ pub struct BitonicNetwork<L> {
     // Number of layers in the network
     num_layers: usize,
     // Outputs of the network
-    outputs: Vec<Shared<L>>,
+    outputs: Vec<NonNull<L>>,
     // Pointers to balancer's memory locations
-    balancers: RawVec<Shared<InternalBalancer<L>>>,
+    balancers: RawVec<NonNull<InternalBalancer<L>>>,
 }
 
 // Can be dropped without custom logic
 enum Balancer<L> {
-    Internal(Shared<InternalBalancer<L>>),
-    Leaf(Shared<L>),
+    Internal(NonNull<InternalBalancer<L>>),
+    Leaf(NonNull<L>),
 }
 
 // Can be dropped without custom logic
@@ -38,7 +38,7 @@ impl<L> InternalBalancer<L> {
     fn new() -> Self {
         InternalBalancer {
             value: AtomicUsize::new(0),
-            outputs: [Balancer::Internal(Shared::empty()), Balancer::Internal(Shared::empty())]
+            outputs: [Balancer::Internal(NonNull::dangling()), Balancer::Internal(NonNull::dangling())]
         }
     }
 
@@ -65,7 +65,7 @@ impl<L> Balancer<L> {
         !self.is_leaf()
     }
 
-    fn leaf_ref(&self) -> &Shared<L> {
+    fn leaf_ref(&self) -> &NonNull<L> {
         match self {
             &Balancer::Internal(_) => {
                 panic!("called `Balancer::unwrap_leaf()` on a `Internal` value")
@@ -74,7 +74,7 @@ impl<L> Balancer<L> {
         }
     }
 
-    fn unwrap_leaf(self) -> Shared<L> {
+    fn unwrap_leaf(self) -> NonNull<L> {
         match self {
             Balancer::Internal(_) => {
                 panic!("called `Balancer::unwrap_leaf()` on a `Internal` value")
@@ -83,7 +83,7 @@ impl<L> Balancer<L> {
         }
     }
 
-    fn unwrap_internal(self) -> Shared<InternalBalancer<L>> {
+    fn unwrap_internal(self) -> NonNull<InternalBalancer<L>> {
         match self {
             Balancer::Internal(balancer) => balancer,
             Balancer::Leaf(value) => {
@@ -116,7 +116,7 @@ impl<L> BitonicNetwork<L> {
         let allocated_outputs = outputs
             .into_iter()
             .map(|output: L| {
-                let output_location = Shared::from(Heap.alloc_one::<L>().unwrap());
+                let output_location = Heap.alloc_one::<L>().unwrap();
                 unsafe {
                     output_location.as_ptr().write(output);
                 }
@@ -144,7 +144,7 @@ impl<L> BitonicNetwork<L> {
 
         // let unique_raw_ptrs: HashSet<*mut InternalBalancer<L>> = wires.into_iter().flat_map(|w| w.balancer_history.into_iter()).map(|b| b.0.as_ptr()).collect();
 
-        // unique_raw_ptrs.into_iter().filter_map(|ptr| Shared::new(ptr))
+        // unique_raw_ptrs.into_iter().filter_map(|ptr| NonNull::new(ptr))
 
         let mut network = BitonicNetwork {
             width,
@@ -198,7 +198,7 @@ impl<L> BitonicNetwork<L> {
         unsafe { current.leaf_ref().as_ref() } 
     }
 
-    fn layer_slice(&self, index: usize) -> &[Shared<InternalBalancer<L>>] {
+    fn layer_slice(&self, index: usize) -> &[NonNull<InternalBalancer<L>>] {
         let layer_width = self.width / 2;
 
         unsafe {
@@ -207,7 +207,7 @@ impl<L> BitonicNetwork<L> {
         }
     }
 
-    fn layer_slice_mut(&mut self, index: usize) -> &mut [Shared<InternalBalancer<L>>] {
+    fn layer_slice_mut(&mut self, index: usize) -> &mut [NonNull<InternalBalancer<L>>] {
         let layer_width = self.width / 2;
 
         unsafe {
@@ -219,7 +219,7 @@ impl<L> BitonicNetwork<L> {
 
 impl<L> Drop for BitonicNetwork<L> {
     fn drop(&mut self) {
-        // Drop each internal balancer, leaving Shared pointers to output
+        // Drop each internal balancer, leaving NonNull pointers to output
         // Then dealloc balancer memory
         let balancers_head = self.balancers.ptr();
         let balancer_layout = Layout::new::<InternalBalancer<L>>();
@@ -242,7 +242,7 @@ impl<L> Drop for BitonicNetwork<L> {
 }
 
 struct Wire<L> {
-    balancer_history: Vec<(Shared<InternalBalancer<L>>, bool)>,
+    balancer_history: Vec<(NonNull<InternalBalancer<L>>, bool)>,
     value: usize,
 }
 
@@ -271,15 +271,15 @@ impl<L> Wire<L> {
         self.balancer_history.len()
     }
 
-    fn last(&self) -> (Shared<InternalBalancer<L>>, bool) {
+    fn last(&self) -> (NonNull<InternalBalancer<L>>, bool) {
         self.balancer_history[self.balancer_history.len() - 1]
     }
 
-    fn add(&mut self, balancer: Shared<InternalBalancer<L>>, up: bool) {
+    fn add(&mut self, balancer: NonNull<InternalBalancer<L>>, up: bool) {
         self.balancer_history.push((balancer, up));
     }
 
-    fn pop(&mut self) -> Option<(Shared<InternalBalancer<L>>, bool)> {
+    fn pop(&mut self) -> Option<(NonNull<InternalBalancer<L>>, bool)> {
         self.balancer_history.pop()
     }
 }
@@ -302,7 +302,7 @@ fn merge_wires<L>(upper: Vec<Wire<L>>, lower: Vec<Wire<L>>) -> Vec<Wire<L>> {
         debug_assert_eq!(upper_wire.num_balancers(), lower_wire.num_balancers());
 
         let new_balancer = InternalBalancer::new();
-        let new_balancer_alloc = Shared::from(Heap.alloc_one::<InternalBalancer<L>>().unwrap());
+        let new_balancer_alloc = Heap.alloc_one::<InternalBalancer<L>>().unwrap();
         unsafe {
             new_balancer_alloc.as_ptr().write(new_balancer);
 
