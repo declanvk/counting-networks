@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use std::thread;
 use std::slice;
 use std::cmp;
+use std::vec::Vec;
 
 use alloc::raw_vec::RawVec;
 
@@ -22,13 +23,11 @@ pub struct BitonicNetwork<L> {
     balancers: RawVec<NonNull<InternalBalancer<L>>>,
 }
 
-// Can be dropped without custom logic
 enum Balancer<L> {
     Internal(NonNull<InternalBalancer<L>>),
     Leaf(NonNull<L>),
 }
 
-// Can be dropped without custom logic
 struct InternalBalancer<L> {
     value: AtomicUsize,
     outputs: [Balancer<L>; 2],
@@ -86,7 +85,7 @@ impl<L> Balancer<L> {
     fn unwrap_internal(self) -> NonNull<InternalBalancer<L>> {
         match self {
             Balancer::Internal(balancer) => balancer,
-            Balancer::Leaf(value) => {
+            Balancer::Leaf(_) => {
                 panic!("called `Balancer::unwrap_internal()` on a `Leaf` value")
             }
         }
@@ -124,15 +123,12 @@ impl<L> BitonicNetwork<L> {
             })
             .collect::<Vec<_>>();
 
-        let num_layers = BitonicNetwork::<L>::num_layers(width);
+        let num_layers = num_layers(width);
         let layer_width = width / 2;
 
         let mut wires: Vec<Wire<L>> = construct_bitonic(width, 0);
         debug_assert_eq!(wires.len(), allocated_outputs.len());
-        debug_assert_eq!(num_layers * layer_width, wires.iter().map(|w| w.num_balancers()).sum::<usize>());
-
-        // Based on Ord implementation, will sort wires by value (1, 2, 3, ...)
-        wires.sort();
+        debug_assert_eq!(num_layers * layer_width * 2, wires.iter().map(|w| w.num_balancers()).sum::<usize>());
 
         // For each wire, attach the output. This assumes that the outputs are ordered
         // corresponding to the way they should be arranged in the network, e.g.
@@ -180,8 +176,8 @@ impl<L> BitonicNetwork<L> {
         self.width
     }
 
-    fn num_layers(width: usize) -> usize {
-        binomial_coefficient((log2_floor(width as u64) + 1) as u64, 2) as usize
+    pub fn num_layers(&self) -> usize {
+        self.num_layers
     }
 
     /// Traverse the network and obtain a reference to an output element.
@@ -239,6 +235,10 @@ impl<L> Drop for BitonicNetwork<L> {
             }
         }
     }
+}
+
+fn num_layers(width: usize) -> usize {
+    binomial_coefficient((log2_floor(width as u64) + 1) as u64, 2) as usize
 }
 
 struct Wire<L> {
@@ -314,15 +314,15 @@ fn merge_wires<L>(upper: Vec<Wire<L>>, lower: Vec<Wire<L>>) -> Vec<Wire<L>> {
             }
 
             if lower_wire.num_balancers() > 0 {
-                let (mut last, up) = upper_wire.last();
+                let (mut last, up) = lower_wire.last();
                 let mut temp = last.as_ptr().read();
                 temp.outputs[up as usize] = Balancer::Internal(new_balancer_alloc);
                 last.as_ptr().write(temp);
             }
         }
 
-        upper_wire.add(new_balancer_alloc, true);
-        lower_wire.add(new_balancer_alloc, false);
+        upper_wire.add(new_balancer_alloc, false);
+        lower_wire.add(new_balancer_alloc, true);
 
         wires.push(upper_wire);
         wires.push(lower_wire);
@@ -365,9 +365,11 @@ mod tests {
 
     #[test]
     fn initialize_network() {
-        let network = BitonicNetwork::new(16, vec![1; 16]);
+        const WIDTH: usize = 16;
 
-        assert_eq!(network.width(), 16);
+        let network = BitonicNetwork::new(WIDTH, vec![1; WIDTH]);
+
+        assert_eq!(network.width(), WIDTH);
     }
 
     #[test]
@@ -382,4 +384,14 @@ mod tests {
         let network = BitonicNetwork::new(4, vec![1, 2]);
     }
 
+    #[test]
+    fn traverse_network() {
+        const WIDTH: usize = 16;
+        let outputs = (1..(WIDTH + 1)).collect::<Vec<_>>();
+        let network = BitonicNetwork::new(WIDTH, outputs);
+        
+        for output in 1..(WIDTH + 1) {
+            assert_eq!(network.traverse(), &output);
+        }
+    }
 }
