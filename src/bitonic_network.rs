@@ -3,13 +3,11 @@ use std::ptr::NonNull;
 use std::heap::{Alloc, Heap, Layout};
 use std::collections::HashSet;
 use std::thread;
-use std::slice;
 use std::cmp;
-use std::vec::Vec;
+use std::ops::Range;
+use std::collections::VecDeque;
 
-use alloc::raw_vec::RawVec;
-
-use util::{binomial_coefficient, log2_floor, hash_single};
+use util::{binomial_coefficient, hash_single, log2_floor};
 
 // Needs custom drop logic to ensure balancers are cleaned up
 pub struct BitonicNetwork<L> {
@@ -20,7 +18,7 @@ pub struct BitonicNetwork<L> {
     // Outputs of the network
     outputs: Vec<NonNull<L>>,
     // Pointers to balancer's memory locations
-    balancers: RawVec<NonNull<InternalBalancer<L>>>,
+    balancers: Vec<NonNull<InternalBalancer<L>>>,
 }
 
 enum Balancer<L> {
@@ -37,7 +35,10 @@ impl<L> InternalBalancer<L> {
     fn new() -> Self {
         InternalBalancer {
             value: AtomicUsize::new(0),
-            outputs: [Balancer::Internal(NonNull::dangling()), Balancer::Internal(NonNull::dangling())]
+            outputs: [
+                Balancer::Internal(NonNull::dangling()),
+                Balancer::Internal(NonNull::dangling()),
+            ],
         }
     }
 
@@ -60,10 +61,6 @@ impl<L> Balancer<L> {
         }
     }
 
-    fn is_internal(&self) -> bool {
-        !self.is_leaf()
-    }
-
     fn leaf_ref(&self) -> &NonNull<L> {
         match self {
             &Balancer::Internal(_) => {
@@ -72,31 +69,13 @@ impl<L> Balancer<L> {
             &Balancer::Leaf(ref value) => value,
         }
     }
-
-    fn unwrap_leaf(self) -> NonNull<L> {
-        match self {
-            Balancer::Internal(_) => {
-                panic!("called `Balancer::unwrap_leaf()` on a `Internal` value")
-            }
-            Balancer::Leaf(value) => value,
-        }
-    }
-
-    fn unwrap_internal(self) -> NonNull<InternalBalancer<L>> {
-        match self {
-            Balancer::Internal(balancer) => balancer,
-            Balancer::Leaf(_) => {
-                panic!("called `Balancer::unwrap_internal()` on a `Leaf` value")
-            }
-        }
-    }
 }
 
 impl<L> BitonicNetwork<L> {
     /// Construct a new network with given width (which must be a power of 2) and outputs.
     ///
     /// Outputs must be ordered corresponding to how they should appear in the network.
-    /// 
+    ///
     /// For example in a 4-width network:
     /// ```text
     /// xi = ith input
@@ -128,42 +107,49 @@ impl<L> BitonicNetwork<L> {
 
         let mut wires: Vec<Wire<L>> = construct_bitonic(width, 0);
         debug_assert_eq!(wires.len(), allocated_outputs.len());
-        debug_assert_eq!(num_layers * layer_width * 2, wires.iter().map(|w| w.num_balancers()).sum::<usize>());
+        debug_assert_eq!(
+            num_layers * layer_width * 2,
+            wires.iter().map(|w| w.num_balancers()).sum::<usize>()
+        );
 
         // For each wire, attach the output. This assumes that the outputs are ordered
         // corresponding to the way they should be arranged in the network, e.g.
         // [output for wire 0, output for wire 2, output for wire 3, ...]
         for (wire, output) in wires.iter().zip(allocated_outputs.iter()) {
             let (last_balancer, up) = wire.last();
-            unsafe { (*last_balancer.as_ptr()).outputs[up as usize] = Balancer::Leaf(output.clone()); }
+            unsafe {
+                (*last_balancer.as_ptr()).outputs[up as usize] = Balancer::Leaf(output.clone());
+            }
         }
-
-        // let unique_raw_ptrs: HashSet<*mut InternalBalancer<L>> = wires.into_iter().flat_map(|w| w.balancer_history.into_iter()).map(|b| b.0.as_ptr()).collect();
-
-        // unique_raw_ptrs.into_iter().filter_map(|ptr| NonNull::new(ptr))
 
         let mut network = BitonicNetwork {
             width,
             num_layers,
             outputs: allocated_outputs,
-            balancers: RawVec::with_capacity(num_layers * layer_width),
+            balancers: Vec::with_capacity(num_layers * layer_width),
         };
 
         // For each layer in network, fill it with balancers. This method will allow easy
         // access to inputs in the traverse call.
-        for index in (0..num_layers).rev() {
-            let layer = network.layer_slice_mut(index);
+        for _ in 0..num_layers {
             let mut unique_balancers: HashSet<*mut InternalBalancer<L>> = HashSet::new();
+            let mut layer: Vec<(usize, NonNull<InternalBalancer<L>>)> = Vec::new();
 
             for wire in wires.iter_mut() {
-                if let Some((balancer, _)) = wire.pop() {
+                if let Some((balancer, _)) = wire.pop_front() {
                     if !unique_balancers.contains(&balancer.as_ptr()) {
                         unique_balancers.insert(balancer.as_ptr());
 
-                        layer[wire.value / 2] = balancer;
+                        layer.push((wire.value, balancer));
                     }
                 }
             }
+
+            layer.sort_by_key(|&(idx, _)| idx);
+
+            network
+                .balancers
+                .extend(layer.into_iter().map(|(_, ptr)| ptr));
         }
 
         network
@@ -184,54 +170,44 @@ impl<L> BitonicNetwork<L> {
     pub fn traverse(&self) -> &L {
         let input_slot = hash_single(thread::current().id()) % (self.width as u64);
 
-        let mut current: &Balancer<L> = unsafe { self.layer_slice(0)[input_slot as usize / 2].as_ref().next() };
+        let mut current: &Balancer<L> = unsafe {
+            self.balancers[get_layer_range(0, self.width / 2)][input_slot as usize / 2]
+                .as_ref()
+                .next()
+        };
 
         while let &Balancer::Internal(ref balancer) = current {
             current = unsafe { balancer.as_ref().next() };
         }
 
         assert!(current.is_leaf());
-        unsafe { current.leaf_ref().as_ref() } 
-    }
-
-    fn layer_slice(&self, index: usize) -> &[NonNull<InternalBalancer<L>>] {
-        let layer_width = self.width / 2;
-
-        unsafe {
-            let layer_head = self.balancers.ptr().add(layer_width * index);
-            slice::from_raw_parts(layer_head, layer_width)
-        }
-    }
-
-    fn layer_slice_mut(&mut self, index: usize) -> &mut [NonNull<InternalBalancer<L>>] {
-        let layer_width = self.width / 2;
-
-        unsafe {
-            let layer_head = self.balancers.ptr().add(layer_width * index);
-            slice::from_raw_parts_mut(layer_head, layer_width)
-        }
+        unsafe { current.leaf_ref().as_ref() }
     }
 }
+
+unsafe impl<L> Send for BitonicNetwork<L> {}
+unsafe impl<L> Sync for BitonicNetwork<L> {}
 
 impl<L> Drop for BitonicNetwork<L> {
     fn drop(&mut self) {
         // Drop each internal balancer, leaving NonNull pointers to output
         // Then dealloc balancer memory
-        let balancers_head = self.balancers.ptr();
         let balancer_layout = Layout::new::<InternalBalancer<L>>();
-        for balancer_idx in 0..self.balancers.cap() {
+        for balancer_ptr in self.balancers.iter_mut() {
             unsafe {
-                balancers_head.add(balancer_idx).drop_in_place();
-                Heap.dealloc(balancers_head.add(balancer_idx) as *mut u8, balancer_layout.clone());
+                let raw_ptr = balancer_ptr.as_ptr();
+                raw_ptr.drop_in_place();
+                Heap.dealloc(raw_ptr as *mut u8, balancer_layout.clone());
             }
         }
 
         // For each output allocation, drop output and dealloc
         let output_layout = Layout::new::<L>();
-        for output in self.outputs.iter_mut() {
+        for output_ptr in self.outputs.iter_mut() {
             unsafe {
-                output.as_ptr().drop_in_place();
-                Heap.dealloc(output.as_ptr() as *mut u8, output_layout.clone());
+                let raw_ptr = output_ptr.as_ptr();
+                raw_ptr.drop_in_place();
+                Heap.dealloc(raw_ptr as *mut u8, output_layout.clone());
             }
         }
     }
@@ -241,8 +217,15 @@ fn num_layers(width: usize) -> usize {
     binomial_coefficient((log2_floor(width as u64) + 1) as u64, 2) as usize
 }
 
+fn get_layer_range(layer_idx: usize, layer_width: usize) -> Range<usize> {
+    let start = layer_width * layer_idx;
+    let end = layer_width * (layer_idx + 1);
+
+    start..end
+}
+
 struct Wire<L> {
-    balancer_history: Vec<(NonNull<InternalBalancer<L>>, bool)>,
+    balancer_history: VecDeque<(NonNull<InternalBalancer<L>>, bool)>,
     value: usize,
 }
 
@@ -276,20 +259,29 @@ impl<L> Wire<L> {
     }
 
     fn add(&mut self, balancer: NonNull<InternalBalancer<L>>, up: bool) {
-        self.balancer_history.push((balancer, up));
+        self.balancer_history.push_back((balancer, up));
     }
 
-    fn pop(&mut self) -> Option<(NonNull<InternalBalancer<L>>, bool)> {
-        self.balancer_history.pop()
+    fn pop_front(&mut self) -> Option<(NonNull<InternalBalancer<L>>, bool)> {
+        self.balancer_history.pop_front()
     }
 }
 
 fn split_even_odd<L>(wires: Vec<Wire<L>>) -> (Vec<Wire<L>>, Vec<Wire<L>>) {
-    let (even_wires, odd_wires): (Vec<(usize, Wire<L>)>, Vec<(usize, Wire<L>)>) = wires.into_iter().enumerate().partition(|&(idx, _)| idx % 2 == 0);
+    let (even_wires, odd_wires): (Vec<(usize, Wire<L>)>, Vec<(usize, Wire<L>)>) = wires
+        .into_iter()
+        .enumerate()
+        .partition(|&(idx, _)| idx % 2 == 0);
 
-    let even = even_wires.into_iter().map(|(_, value)| value).collect::<Vec<_>>();
+    let even = even_wires
+        .into_iter()
+        .map(|(_, value)| value)
+        .collect::<Vec<_>>();
 
-    let odd = odd_wires.into_iter().map(|(_, value)| value).collect::<Vec<_>>();
+    let odd = odd_wires
+        .into_iter()
+        .map(|(_, value)| value)
+        .collect::<Vec<_>>();
 
     (even, odd)
 }
@@ -333,10 +325,12 @@ fn merge_wires<L>(upper: Vec<Wire<L>>, lower: Vec<Wire<L>>) -> Vec<Wire<L>> {
 
 fn construct_bitonic<L>(width: usize, wire_index: usize) -> Vec<Wire<L>> {
     if width == 1 {
-        vec![Wire {
-            balancer_history: Vec::new(),
-            value: wire_index
-        }]
+        vec![
+            Wire {
+                balancer_history: VecDeque::new(),
+                value: wire_index,
+            },
+        ]
     } else {
         let upper_result = construct_bitonic(width / 2, wire_index);
         let lower_result = construct_bitonic(width / 2, wire_index + width / 2);
@@ -362,6 +356,19 @@ fn merge_networks<L>(upper: Vec<Wire<L>>, lower: Vec<Wire<L>>) -> Vec<Wire<L>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn sync_only<T: Sync>(_: T) {}
+    fn send_only<T: Send>(_: T) {}
+
+    #[test]
+    fn is_send() {
+        send_only(BitonicNetwork::new(4, vec![1; 4]));
+    }
+
+    #[test]
+    fn is_sync() {
+        sync_only(BitonicNetwork::new(4, vec![1; 4]));
+    }
 
     #[test]
     fn initialize_network() {
@@ -389,7 +396,7 @@ mod tests {
         const WIDTH: usize = 16;
         let outputs = (1..(WIDTH + 1)).collect::<Vec<_>>();
         let network = BitonicNetwork::new(WIDTH, outputs);
-        
+
         for output in 1..(WIDTH + 1) {
             assert_eq!(network.traverse(), &output);
         }
