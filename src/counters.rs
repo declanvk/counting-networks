@@ -1,6 +1,6 @@
 use std::cell::Cell;
 
-use bitonic_network::BitonicNetwork;
+use networks::bitonic::BitonicNetwork;
 
 pub struct CountingBucket {
     value: Cell<usize>,

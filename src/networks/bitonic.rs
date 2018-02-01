@@ -9,7 +9,7 @@ use std::collections::VecDeque;
 
 use util::{binomial_coefficient, hash_single, log2_floor};
 
-// Needs custom drop logic to ensure balancers are cleaned up
+/// A counting network type with unspecified outputs.
 pub struct BitonicNetwork<L> {
     // Width of the network
     width: usize,
@@ -26,6 +26,9 @@ enum Balancer<L> {
     Leaf(NonNull<L>),
 }
 
+// Align struct to cache size (Intel)
+// This prevents false sharing of the balancer between multiple cores.
+#[repr(align(64))]
 struct InternalBalancer<L> {
     value: AtomicUsize,
     outputs: [Balancer<L>; 2],

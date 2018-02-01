@@ -1,6 +1,6 @@
 #![feature(allocator_api, unique, pointer_methods, core_intrinsics, shared)]
 
 pub mod hash_table;
-pub mod bitonic_network;
-pub mod counter;
+pub mod networks;
+pub mod counters;
 mod util;
