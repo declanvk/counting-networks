@@ -92,7 +92,6 @@ mod tests {
         for _ in 0..NUM_THREADS {
             let counter_copy = counter.clone();
             let handle = thread::spawn(move || {
-                let id = thread::current().id();
                 let mut values = Vec::new();
                 for _ in 0..NUM_COUNTS {
                     let value = counter_copy.next();

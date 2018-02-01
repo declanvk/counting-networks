@@ -382,13 +382,13 @@ mod tests {
     #[test]
     #[should_panic]
     fn initialize_network_bad_width() {
-        let network = BitonicNetwork::new(3, vec![1, 2, 3]);
+        let _ = BitonicNetwork::new(3, vec![1, 2, 3]);
     }
 
     #[test]
     #[should_panic]
     fn initialize_network_not_matching_outputs() {
-        let network = BitonicNetwork::new(4, vec![1, 2]);
+        let _ = BitonicNetwork::new(4, vec![1, 2]);
     }
 
     #[test]
