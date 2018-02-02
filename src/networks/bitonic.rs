@@ -13,7 +13,61 @@ use util::{binomial_coefficient, hash_single, log2_floor};
 
 /// A type of counting network
 ///
-/// See [the module level documentation](index.html) for more.
+/// See [the module level documentation](index.html) for general information about counting networks.
+/// 
+/// A bitonic network is constructed recurisvely. A rough pseudocode implementatio would look like
+/// ```text
+/// fn bitonic(width):
+///     upper_wires = bitonic(width / 2)
+///     lower_wires = bitonic(width / 2)
+///
+///     output = merge(upper_wires, lower_wires)
+///     return output
+/// ```
+///
+/// The construction of a ``Bitonic[8]`` looks like:
+/// ```text
+///      ┌────────────────┐          ┌──────────────┐
+/// ─────┤                ├──────────┤              ├──────────
+/// ─────┤   Bitonic[4]   ├──────────┤              ├──────────
+/// ─────┤                ├──────────┤              ├──────────
+/// ─────┤                ├──────────┤              ├──────────
+///      └────────────────┘          │   Merge[8]   │
+///      ┌────────────────┐          │              │
+/// ─────┤                ├──────────┤              ├──────────
+/// ─────┤   Bitonic[4]   ├──────────┤              ├──────────
+/// ─────┤                ├──────────┤              ├──────────
+/// ─────┤                ├──────────┤              ├──────────
+///      └────────────────┘          └──────────────┘
+/// ```
+///
+/// The base case for ``Bitonic[w]`` is ``Bitonic[1]`` which is a no op, the single wire is 
+/// unchanced. The real work of the recursive construction occurs in the ``Merge[w]`` element.
+/// The base case of the ``Merge[w]`` network is ``Merge[2]`` which consists of a single balancer.
+/// ``Merge[8]`` can be visualized as:
+///
+/// ```text
+///                           ┌────────────────┐
+/// x0 ───────────────────────┤                ├─────────────┲┱── y0
+/// x1 ─────┐ ┌───────────────┤    Merge[4]    ├────┐  ┌─────┺┹── y1
+/// x2 ─────┼─┘ ┌─────────────┤                ├───┐└──┼─────┲┱── y2
+/// x3 ───┐ │   │ ┌───────────┤                ├─┐ │ ┌─┼─────┺┹── y3
+///       │ └───┼─┼───────┐   └────────────────┘ └─┼─┼─┼─┐
+///       └─────┼─┼─────┐ │   ┌────────────────┐   └─┼─┼─┼─┐
+/// x4 ─────────┼─┼───┐ │ └───┤                ├─────┼─┘ │ └─┲┱── y4
+/// x5 ─────────┘ │   │ └─────┤    Merge[4]    ├─────┘┌──┼───┺┹── y5
+/// x6 ───────────┼─┐ └───────┤                ├──────┘  └───┲┱── y6
+/// x7 ───────────┘ └─────────┤                ├─────────────┺┹── y7
+///                           └────────────────┘
+/// ┏┓
+/// ┗┛ are balancers, xi is the ith wire, yi is the ith output
+/// ```
+///
+/// For the input wires, the even numbered wires (0, 2) of the top inputs to the top 2 slots
+/// of the top ``Merge[4]`` network, while the odd numbered wires of (1, 3) of the top 
+/// inputs go to top of the 2 slots of the bottom ``Merge[4]`` network. This is flipped for the 
+/// bottom 4 inputs, where the odd numbered inputs (5, 7) go to the upper ``Merge[4]`` network,
+/// while the evens go to the bottom ``Merge[4]`` network.
 pub struct BitonicNetwork<L> {
     // Width of the network
     width: usize,

@@ -1,47 +1,77 @@
+//! Concrete implementations of shared counter using counting networks implenented in this crate.
+
 use std::cell::Cell;
 
 use networks::BitonicNetwork;
 
-pub struct CountingBucket {
+struct CountingBucket {
     value: Cell<usize>,
 }
 
 impl CountingBucket {
-    pub fn new(starting_value: usize) -> Self {
+    fn new(starting_value: usize) -> Self {
         CountingBucket {
             value: Cell::new(starting_value),
         }
     }
 
-    pub fn get(&self) -> usize {
+    fn get(&self) -> usize {
         self.value.get()
     }
 
-    pub fn inc(&self, increment: usize) {
+    fn inc(&self, increment: usize) {
         self.value.set(self.value.get() + increment);
     }
 }
 
+/// Output sequential values without duplicates or skips.
 pub trait Counter {
-    fn new(width: usize) -> Self;
-    fn width(&self) -> usize;
+    /// Retrieve value from counter and update internal state.
     fn next(&self) -> usize;
 }
 
+/// Concrete counter based on [BitonicNetwork](super::networks::BitonicNetwork).
 pub struct BitonicCountingNetwork(BitonicNetwork<CountingBucket>);
 
-impl Counter for BitonicCountingNetwork {
-    fn new(width: usize) -> Self {
+impl BitonicCountingNetwork {
+    /// Create a new counter with specified width.
+    ///
+    /// Choice of width will not effect output of the counter, but higher values will ensure
+    /// less contention among threads while accessing the counter at the cost of more memory.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use counting_networks::counters::{Counter, BitonicCountingNetwork};
+    ///
+    /// let counter = BitonicCountingNetwork::new(8);
+    /// 
+    /// assert_eq!(counter.next(), 0);
+    /// ```
+    pub fn new(width: usize) -> Self {
         let outputs = (0..width)
             .map(|v| CountingBucket::new(v))
             .collect::<Vec<_>>();
         BitonicCountingNetwork(BitonicNetwork::new(outputs))
     }
 
-    fn width(&self) -> usize {
+    /// Returns the output width of the internal bitonic network.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use counting_networks::counters::BitonicCountingNetwork;
+    ///
+    /// let counter = BitonicCountingNetwork::new(8);
+    /// 
+    /// assert_eq!(counter.width(), 8);
+    /// ```
+    pub fn width(&self) -> usize {
         self.0.width()
     }
+}
 
+impl Counter for BitonicCountingNetwork {
     fn next(&self) -> usize {
         let bucket = self.0.traverse();
 
