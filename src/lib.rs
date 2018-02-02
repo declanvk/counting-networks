@@ -1,5 +1,6 @@
 #![feature(allocator_api, unique, pointer_methods, core_intrinsics, shared)]
 #![warn(missing_docs)]
+#![doc(html_root_url = "https://docs.rs/log/0.1.0")]
 
 //! A counting network is a type of concurrent data structure that gives non-blocking access to specific
 //! operations, most commonly ``fetch-and-inc``.
