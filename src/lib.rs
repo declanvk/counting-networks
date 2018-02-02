@@ -61,4 +61,3 @@ pub mod networks;
 pub mod counters;
 
 mod util;
-mod hash_table;
