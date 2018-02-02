@@ -1,6 +1,6 @@
 [package]
 name = "counting-networks"
-version = "0.1.0"
+version = "0.1.0" # remember to update html_root_url
 authors = ["Declan Kelly <dkelly.home@gmail.com>"]
 
 [dependencies]

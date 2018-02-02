@@ -6,15 +6,17 @@ use std::thread;
 use std::cmp;
 use std::ops::Range;
 use std::collections::VecDeque;
+use std::fmt;
+use std::hash::{Hash, Hasher};
 
 use util::{binomial_coefficient, hash_single, log2_floor};
 
-/// A counting network type with unspecified outputs.
+/// A type of counting network
+///
+/// See [the module level documentation](index.html) for more.
 pub struct BitonicNetwork<L> {
     // Width of the network
     width: usize,
-    // Number of layers in the network
-    num_layers: usize,
     // Outputs of the network
     outputs: Vec<NonNull<L>>,
     // Pointers to balancer's memory locations
@@ -90,10 +92,23 @@ impl<L> BitonicNetwork<L> {
     /// x4 ─────╨────╨─────╨─── y4
     /// ```
     /// The outputs passed through should appear [y1, y2, y3, y4]
-    pub fn new(width: usize, outputs: Vec<L>) -> Self {
-        assert!(width.is_power_of_two());
-        assert_eq!(width, outputs.len());
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use counting_networks::networks::BitonicNetwork;
+    ///
+    /// let outputs = vec![1, 2, 3, 4];
+    ///
+    /// let network = BitonicNetwork::new(outputs);
+    ///
+    /// assert_eq!(network.width(), 4);
+    /// assert_eq!(network.outputs(), vec![&1, &2, &3, &4]);
+    /// ```
+    pub fn new(outputs: Vec<L>) -> Self {
+        assert!(outputs.len().is_power_of_two());
 
+        let width = outputs.len();
         let allocated_outputs = outputs
             .into_iter()
             .map(|output: L| {
@@ -127,7 +142,6 @@ impl<L> BitonicNetwork<L> {
 
         let mut network = BitonicNetwork {
             width,
-            num_layers,
             outputs: allocated_outputs,
             balancers: Vec::with_capacity(num_layers * layer_width),
         };
@@ -160,16 +174,33 @@ impl<L> BitonicNetwork<L> {
 
     /// Returns the width of the network.
     ///
-    /// This will always be a power of 2.
+    /// # Examples
+    ///
+    /// ```
+    /// use counting_networks::networks::BitonicNetwork;
+    ///
+    /// let network = BitonicNetwork::new(vec![1, 2, 3, 4]);
+    ///
+    /// assert_eq!(network.width(), 4);
+    /// ```
     pub fn width(&self) -> usize {
         self.width
     }
 
-    pub fn num_layers(&self) -> usize {
-        self.num_layers
-    }
-
     /// Traverse the network and obtain a reference to an output element.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use counting_networks::networks::BitonicNetwork;
+    ///
+    /// let network = BitonicNetwork::new(vec![1, 2, 3, 4]);
+    ///
+    /// assert_eq!(network.traverse(), &1);
+    /// assert_eq!(network.traverse(), &2);
+    /// assert_eq!(network.traverse(), &3);
+    /// assert_eq!(network.traverse(), &4);
+    /// ```
     pub fn traverse(&self) -> &L {
         let input_slot = hash_single(thread::current().id()) % (self.width as u64);
 
@@ -185,6 +216,71 @@ impl<L> BitonicNetwork<L> {
 
         assert!(current.is_leaf());
         unsafe { current.leaf_ref().as_ref() }
+    }
+
+    /// Get references to all the outputs of the network.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use counting_networks::networks::BitonicNetwork;
+    ///
+    /// let network = BitonicNetwork::new(vec![1, 2, 3, 4]);
+    ///
+    /// assert_eq!(network.outputs(), vec![&1, &2, &3, &4]);
+    /// ```
+    pub fn outputs(&self) -> Vec<&L> {
+        self.outputs.iter().map(|v| unsafe { v.as_ref() }).collect()
+    }
+}
+
+impl<L: PartialEq> PartialEq for BitonicNetwork<L> {
+    fn eq(&self, other: &Self) -> bool {
+        let output_refs = self.outputs.iter().map(|v| unsafe { v.as_ref() });
+        let other_outputs = other.outputs.iter().map(|v| unsafe { v.as_ref() });
+
+        output_refs.eq(other_outputs)
+    }
+}
+
+impl<L: Eq> Eq for BitonicNetwork<L> {}
+
+impl<L: Hash> Hash for BitonicNetwork<L> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.width.hash(state);
+        self.outputs
+            .iter()
+            .map(|v| unsafe { v.as_ref() })
+            .for_each(|output| {
+                output.hash(state);
+            });
+    }
+}
+
+impl<L: Clone> Clone for BitonicNetwork<L> {
+    fn clone(&self) -> Self {
+        let outputs: Vec<L> = self.outputs
+            .iter()
+            .map(|v| unsafe { v.as_ref() })
+            .cloned()
+            .collect();
+
+        BitonicNetwork::new(outputs)
+    }
+}
+
+impl<L: fmt::Debug> fmt::Debug for BitonicNetwork<L> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("BitonicNetwork")
+            .field("width", &self.width)
+            .field(
+                "outputs",
+                &self.outputs
+                    .iter()
+                    .map(|v| unsafe { v.as_ref() })
+                    .collect::<Vec<_>>(),
+            )
+            .finish()
     }
 }
 
@@ -213,6 +309,12 @@ impl<L> Drop for BitonicNetwork<L> {
                 Heap.dealloc(raw_ptr as *mut u8, output_layout.clone());
             }
         }
+    }
+}
+
+impl<L> From<Vec<L>> for BitonicNetwork<L> {
+    fn from(src: Vec<L>) -> Self {
+        BitonicNetwork::new(src)
     }
 }
 
@@ -360,24 +462,25 @@ fn merge_networks<L>(upper: Vec<Wire<L>>, lower: Vec<Wire<L>>) -> Vec<Wire<L>> {
 mod tests {
     use super::*;
 
-    fn sync_only<T: Sync>(_: T) {}
-    fn send_only<T: Send>(_: T) {}
-
     #[test]
     fn is_send() {
-        send_only(BitonicNetwork::new(4, vec![1; 4]));
+        fn send_only<T: Send>(_: T) {}
+
+        send_only(BitonicNetwork::new(vec![1; 4]));
     }
 
     #[test]
     fn is_sync() {
-        sync_only(BitonicNetwork::new(4, vec![1; 4]));
+        fn sync_only<T: Sync>(_: T) {}
+
+        sync_only(BitonicNetwork::new(vec![1; 4]));
     }
 
     #[test]
     fn initialize_network() {
         const WIDTH: usize = 16;
 
-        let network = BitonicNetwork::new(WIDTH, vec![1; WIDTH]);
+        let network = BitonicNetwork::new(vec![1; WIDTH]);
 
         assert_eq!(network.width(), WIDTH);
     }
@@ -385,20 +488,14 @@ mod tests {
     #[test]
     #[should_panic]
     fn initialize_network_bad_width() {
-        let _ = BitonicNetwork::new(3, vec![1, 2, 3]);
-    }
-
-    #[test]
-    #[should_panic]
-    fn initialize_network_not_matching_outputs() {
-        let _ = BitonicNetwork::new(4, vec![1, 2]);
+        let _ = BitonicNetwork::new(vec![1, 2, 3]);
     }
 
     #[test]
     fn traverse_network() {
         const WIDTH: usize = 16;
         let outputs = (1..(WIDTH + 1)).collect::<Vec<_>>();
-        let network = BitonicNetwork::new(WIDTH, outputs);
+        let network = BitonicNetwork::new(outputs);
 
         for output in 1..(WIDTH + 1) {
             assert_eq!(network.traverse(), &output);

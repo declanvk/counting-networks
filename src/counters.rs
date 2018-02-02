@@ -1,6 +1,6 @@
 use std::cell::Cell;
 
-use networks::bitonic::BitonicNetwork;
+use networks::BitonicNetwork;
 
 pub struct CountingBucket {
     value: Cell<usize>,
@@ -35,7 +35,7 @@ impl Counter for BitonicCountingNetwork {
         let outputs = (0..width)
             .map(|v| CountingBucket::new(v))
             .collect::<Vec<_>>();
-        BitonicCountingNetwork(BitonicNetwork::new(width, outputs))
+        BitonicCountingNetwork(BitonicNetwork::new(outputs))
     }
 
     fn width(&self) -> usize {
