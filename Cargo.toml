@@ -7,5 +7,6 @@ repository = "https://github.com/declanvk/counting-networks"
 categories = ["concurrency", "data-structures"]
 keywords = ["concurrency", "data-structures", "lock-free", "counting-network"]
 license = "Apache-2.0/MIT"
+readme = "README.md"
 
 [dependencies]
