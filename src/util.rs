@@ -1,5 +1,6 @@
 use std::hash::{Hash, Hasher};
 use std::collections::hash_map::DefaultHasher;
+use std::ops::Range;
 
 pub fn log2_floor(n: u64) -> u32 {
     63 - n.leading_zeros()
@@ -26,6 +27,27 @@ pub fn hash_single<T>(value: T) -> u64 where T: Hash {
     value.hash(&mut hasher);
 
     hasher.finish()
+}
+
+pub const E_COCHAIN: [usize; 1] = [0b0];
+pub const O_COCHAIN: [usize; 1] = [0b1];
+pub const A_COCHAIN: [usize; 2] = [0b00, 0b11];
+pub const B_COCHAIN: [usize; 2] = [0b01, 0b10];
+
+pub fn generate_cochain(range: Range<usize>, prefixes: &[usize]) -> Vec<usize> {
+    let mask = (1 << prefixes.len()) - 1;
+
+    let mut output = Vec::new();
+
+    for idx in range {
+        for &prefix in prefixes {
+            if (idx & mask) == prefix {
+                output.push(idx);
+            }
+        }
+    }
+
+    output
 }
 
 #[cfg(test)]
@@ -98,5 +120,61 @@ mod tests {
         assert_eq!(log2_floor(16384), 14);
         assert_eq!(log2_floor(32768), 15);
         assert_eq!(log2_floor(65536), 16);
+    }
+
+    #[test]
+    fn check_even_cochains() {
+        let chain_1 = generate_cochain(0..20, &E_COCHAIN);
+        assert!(chain_1.iter().all(|&x| x % 2 == 0));
+        assert_eq!(chain_1.len(), 10);
+
+        let chain_2 = generate_cochain(0..1, &E_COCHAIN);
+        assert!(chain_2.iter().all(|&x| x % 2 == 0));
+        assert_eq!(chain_2.len(), 1);
+
+        let chain_3 = generate_cochain(0..13, &E_COCHAIN);
+        assert!(chain_3.iter().all(|&x| x % 2 == 0));
+        assert_eq!(chain_3.len(), 7);
+    }
+
+    #[test]
+    fn check_odd_cochain() {
+        let chain_1 = generate_cochain(0..20, &O_COCHAIN);
+        assert!(chain_1.iter().all(|&x| x % 2 != 0));
+        assert_eq!(chain_1.len(), 10);
+
+        let chain_2 = generate_cochain(0..1, &O_COCHAIN);
+        assert!(chain_2.iter().all(|&x| x % 2 != 0));
+        assert_eq!(chain_2.len(), 0);
+
+        let chain_3 = generate_cochain(0..13, &O_COCHAIN);
+        assert!(chain_3.iter().all(|&x| x % 2 != 0));
+        assert_eq!(chain_3.len(), 6);
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn check_A_cochain() {
+        let chain_1 = generate_cochain(0..20, &A_COCHAIN);
+        assert_eq!(chain_1, &[0, 3, 4,7, 8, 11, 12, 15, 16, 19]);
+
+        let chain_1 = generate_cochain(0..1, &A_COCHAIN);
+        assert_eq!(chain_1, &[0]);
+
+        let chain_1 = generate_cochain(0..14, &A_COCHAIN);
+        assert_eq!(chain_1, &[0, 3, 4, 7, 8, 11, 12]);
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn check_B_cochain() {
+        let chain_1 = generate_cochain(0..20, &B_COCHAIN);
+        assert_eq!(chain_1, &[1, 2, 5, 6, 9, 10, 13, 14, 17, 18]);
+
+        let chain_1 = generate_cochain(0..1, &B_COCHAIN);
+        assert_eq!(chain_1, &[]);
+
+        let chain_1 = generate_cochain(0..14, &B_COCHAIN);
+        assert_eq!(chain_1, &[1, 2, 5, 6, 9, 10, 13]);
     }
 }
