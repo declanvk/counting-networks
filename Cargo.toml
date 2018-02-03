@@ -2,5 +2,10 @@
 name = "counting-networks"
 version = "0.1.0" # remember to update html_root_url
 authors = ["Declan Kelly <dkelly.home@gmail.com>"]
+description = "Lock-free data structures for concurrent counting"
+repository = "https://github.com/declanvk/counting-networks"
+categories = ["concurrency", "data-structures"]
+keywords = ["concurrency", "data-structures", "lock-free", "counting-network"]
+license = "Apache-2.0/MIT"
 
 [dependencies]
