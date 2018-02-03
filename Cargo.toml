@@ -1,6 +1,6 @@
 [package]
 name = "counting-networks"
-version = "0.1.0" # remember to update html_root_url
+version = "0.1.1" # remember to update html_root_url
 authors = ["Declan Kelly <dkelly.home@gmail.com>"]
 description = "Lock-free data structures for concurrent counting"
 repository = "https://github.com/declanvk/counting-networks"
