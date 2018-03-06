@@ -1,4 +1,7 @@
 # Counting Networks
+[![Crate](http://meritbadge.herokuapp.com/counting-networks)](https://crates.io/crates/counting-networks)
+[![docs.rs](https://docs.rs/counting-networks/badge.svg)](https://docs.rs/counting-networks)
+[![Build Status](https://travis-ci.org/declanvk/counting-networks.svg?branch=master)](https://travis-ci.org/declanvk/counting-networks)
 
 A library of lock-free data structures for concurrent counting.
 
