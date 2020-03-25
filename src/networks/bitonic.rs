@@ -13,19 +13,22 @@ use util::{binomial_coefficient, hash_single, log2_floor};
 
 /// A type of counting network
 ///
-/// See [the module level documentation](index.html) for general information about counting networks.
-/// 
-/// A bitonic network is constructed recurisvely. A rough pseudocode implementatio would look like
+/// See [the module level documentation](index.html) for general information
+/// about counting networks.
+///
+/// A bitonic network is constructed recursively. A rough pseudo-code
+/// implementation would look like
+///
 /// ```text
 /// fn bitonic(width):
-///     upper_wires = bitonic(width / 2)
-///     lower_wires = bitonic(width / 2)
+///  upper_wires = bitonic(width / 2)
+///  lower_wires = bitonic(width / 2)
 ///
-///     output = merge(upper_wires, lower_wires)
-///     return output
+///  output = merge(upper_wires, lower_wires)
+///  return output
 /// ```
 ///
-/// The construction of a ``Bitonic[8]`` looks like:
+/// The construction of a `Bitonic[8]` looks like:
 /// ```text
 ///      ┌────────────────┐          ┌──────────────┐
 /// ─────┤                ├──────────┤              ├──────────
@@ -41,10 +44,11 @@ use util::{binomial_coefficient, hash_single, log2_floor};
 ///      └────────────────┘          └──────────────┘
 /// ```
 ///
-/// The base case for ``Bitonic[w]`` is ``Bitonic[1]`` which is a no op, the single wire is 
-/// unchanced. The real work of the recursive construction occurs in the ``Merge[w]`` element.
-/// The base case of the ``Merge[w]`` network is ``Merge[2]`` which consists of a single balancer.
-/// ``Merge[8]`` can be visualized as:
+/// The base case for `Bitonic[w]` is `Bitonic[1]` which is a no op, the
+/// single wire is unchanged. The real work of the recursive construction occurs
+/// in the `Merge[w]` element. The base case of the `Merge[w]` network is
+/// `Merge[2]` which consists of a single balancer. `Merge[8]` can be
+/// visualized as:
 ///
 /// ```text
 ///                           ┌────────────────┐
@@ -131,11 +135,14 @@ impl<L> Balancer<L> {
 }
 
 impl<L> BitonicNetwork<L> {
-    /// Construct a new network with given width (which must be a power of 2) and outputs.
+    /// Construct a new network with given width (which must be a power of 2)
+    /// and outputs.
     ///
-    /// Outputs must be ordered corresponding to how they should appear in the network.
+    /// Outputs must be ordered corresponding to how they should appear in the
+    /// network.
     ///
     /// For example in a 4-width network:
+    ///
     /// ```text
     /// xi = ith input
     /// yi = ith output
@@ -145,6 +152,7 @@ impl<L> BitonicNetwork<L> {
     /// x3 ─────╥────║──╨──╥─── y3
     /// x4 ─────╨────╨─────╨─── y4
     /// ```
+    ///
     /// The outputs passed through should appear [y1, y2, y3, y4]
     ///
     /// # Examples
