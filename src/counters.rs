@@ -50,9 +50,7 @@ impl BitonicCountingNetwork {
     /// assert_eq!(counter.next(), 0);
     /// ```
     pub fn new(width: usize) -> Self {
-        let outputs = (0..width)
-            .map(|v| CountingBucket::new(v))
-            .collect::<Vec<_>>();
+        let outputs = (0..width).map(CountingBucket::new).collect::<Vec<_>>();
         BitonicCountingNetwork(BitonicNetwork::new(outputs))
     }
 

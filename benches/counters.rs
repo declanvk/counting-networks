@@ -1,8 +1,7 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
 use counting_networks::counters::{BitonicCountingNetwork, Counter};
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use std::sync::Arc;
-use std::thread;
+use std::{sync::Arc, thread};
 
 fn atomic_count_to(counter: Arc<AtomicUsize>, num_threads: usize, max_counter_value: usize) {
     let mut thread_handles = Vec::new();
