@@ -35,7 +35,7 @@ pub struct Balancer<L> {
 }
 
 impl<L> Balancer<L> {
-    pub fn next_segment<'a>(&'a self) -> &'a WireSegment<L> {
+    pub fn next_segment(&self) -> &WireSegment<L> {
         let next_index = self.toggle_up();
         // TODO: Write safety comment
         unsafe {
@@ -108,7 +108,7 @@ pub struct Network<L, B> {
 
 impl<L, B: NetworkConfiguration> Network<L, B> {
     pub fn new(outputs: Vec<L>) -> Self {
-        assert!(outputs.len() > 0);
+        assert!(!outputs.is_empty());
 
         let outputs = outputs.into_boxed_slice();
         let width = outputs.len();
@@ -216,7 +216,7 @@ impl<L: Hash, B> Hash for Network<L, B> {
 
 impl<L: Clone, B: NetworkConfiguration> Clone for Network<L, B> {
     fn clone(&self) -> Self {
-        Network::new(self.outputs.iter().cloned().collect())
+        Network::new(self.outputs.to_vec())
     }
 }
 
