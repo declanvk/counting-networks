@@ -1,26 +1,26 @@
-//! Concrete implementations of shared counter using counting networks implenented in this crate.
+//! Concrete implementations of shared counter using counting networks
+//! implemented in this crate.
 
-use std::cell::Cell;
-
-use networks::BitonicNetwork;
+use crate::networks::BitonicNetwork;
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 struct CountingBucket {
-    value: Cell<usize>,
+    value: AtomicUsize,
 }
 
 impl CountingBucket {
     fn new(starting_value: usize) -> Self {
         CountingBucket {
-            value: Cell::new(starting_value),
+            value: starting_value.into(),
         }
     }
 
     fn get(&self) -> usize {
-        self.value.get()
+        self.value.load(Ordering::Relaxed)
     }
 
     fn inc(&self, increment: usize) {
-        self.value.set(self.value.get() + increment);
+        self.value.fetch_add(increment, Ordering::SeqCst);
     }
 }
 
@@ -36,8 +36,9 @@ pub struct BitonicCountingNetwork(BitonicNetwork<CountingBucket>);
 impl BitonicCountingNetwork {
     /// Create a new counter with specified width.
     ///
-    /// Choice of width will not effect output of the counter, but higher values will ensure
-    /// less contention among threads while accessing the counter at the cost of more memory.
+    /// Choice of width will not effect output of the counter, but higher values
+    /// will ensure less contention among threads while accessing the
+    /// counter at the cost of more memory.
     ///
     /// # Examples
     ///
@@ -45,7 +46,7 @@ impl BitonicCountingNetwork {
     /// use counting_networks::counters::{Counter, BitonicCountingNetwork};
     ///
     /// let counter = BitonicCountingNetwork::new(8);
-    /// 
+    ///
     /// assert_eq!(counter.next(), 0);
     /// ```
     pub fn new(width: usize) -> Self {
@@ -63,7 +64,7 @@ impl BitonicCountingNetwork {
     /// use counting_networks::counters::BitonicCountingNetwork;
     ///
     /// let counter = BitonicCountingNetwork::new(8);
-    /// 
+    ///
     /// assert_eq!(counter.width(), 8);
     /// ```
     pub fn width(&self) -> usize {
@@ -84,11 +85,8 @@ impl Counter for BitonicCountingNetwork {
 
 #[cfg(test)]
 mod tests {
-
-    use std::sync::Arc;
-    use std::thread;
-
     use super::*;
+    use std::{sync::Arc, thread};
 
     #[test]
     fn create_counter() {
@@ -112,6 +110,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn concurrent_counting() {
         const WIDTH: usize = 8;
         const NUM_THREADS: usize = 8;
@@ -133,16 +132,15 @@ mod tests {
             thread_handles.push(handle);
         }
 
-        let mut results: Vec<usize> = thread_handles.into_iter().fold(
-            Vec::new(),
-            |mut container, handle| {
-                container.extend(handle.join().unwrap());
+        let mut results: Vec<usize> =
+            thread_handles
+                .into_iter()
+                .fold(Vec::new(), |mut container, handle| {
+                    container.extend(handle.join().unwrap());
 
-                container
-            },
-        );
+                    container
+                });
         results.sort();
         assert_eq!(results, (0..(NUM_THREADS * NUM_COUNTS)).collect::<Vec<_>>());
     }
-
 }

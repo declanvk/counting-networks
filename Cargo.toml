@@ -1,5 +1,6 @@
 [package]
 name = "counting-networks"
+edition = "2018"
 version = "0.1.3" # remember to update html_root_url
 authors = ["Declan Kelly <dkelly.home@gmail.com>"]
 description = "Lock-free data structures for concurrent counting"
