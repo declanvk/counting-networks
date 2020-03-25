@@ -4,5 +4,6 @@
 //! in general.
 
 mod bitonic;
+mod common;
 
 pub use self::bitonic::BitonicNetwork;
