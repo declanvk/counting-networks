@@ -11,3 +11,7 @@ license = "Apache-2.0/MIT"
 readme = "README.md"
 
 [dependencies]
+
+[dev-dependencies]
+loom = { version = "0.3", features = ["checkpoint"] }
+num_cpus = "1.12"
