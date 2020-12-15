@@ -22,7 +22,7 @@ codegen-units = 1
 [dependencies]
 
 [dev-dependencies]
-loom = { version = "0.3", features = ["checkpoint"] }
+loom = { version = "0.4", features = ["checkpoint"] }
 num_cpus = "1.12"
 criterion = "0.3.1"
 
