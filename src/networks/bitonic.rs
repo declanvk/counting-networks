@@ -220,7 +220,7 @@ impl BitonicConfigurationIter {
         self.stack.extend(
             pair_iter
                 .map(BitonicStep::Output)
-                // import that it is reversed here
+                // important that it is reversed here
                 .rev(),
         );
 
@@ -233,33 +233,29 @@ impl BitonicConfigurationIter {
             let top_even: Vec<_> = top_range
                 .clone()
                 .step_by(2)
-                .map(|idx| self.output_stack[idx])
-                .collect();
+                .map(|idx| self.output_stack[idx]);
             let top_odd: Vec<_> = top_range
                 .skip(1)
                 .step_by(2)
-                .map(|idx| self.output_stack[idx])
-                .collect();
+                .map(|idx| self.output_stack[idx]);
 
             let bottom_even: Vec<_> = bottom_range
                 .clone()
                 .step_by(2)
-                .map(|idx| self.output_stack[idx])
-                .collect();
+                .map(|idx| self.output_stack[idx]);
             let bottom_odd: Vec<_> = bottom_range
                 .skip(1)
                 .step_by(2)
-                .map(|idx| self.output_stack[idx])
-                .collect();
+                .map(|idx| self.output_stack[idx]);
 
             // The bottom merge goes into the stack first
             self.output_stack
-                .extend(top_odd.into_iter().chain(bottom_even));
+                .extend(top_odd.chain(bottom_even));
             self.stack.push(BitonicStep::Merge(width / 2));
 
             // The top merge will be processed first
             self.output_stack
-                .extend(top_even.into_iter().chain(bottom_odd));
+                .extend(top_even.chain(bottom_odd));
             self.stack.push(BitonicStep::Merge(width / 2));
         }
 
